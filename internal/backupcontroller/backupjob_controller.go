@@ -232,8 +232,8 @@ func (r *BackupJobReconciler) handleProjectionError(ctx context.Context, j *back
 	logger := getLogger(ctx)
 	// Tenant-side projection failures must be visible in the same
 	// Prometheus counter as system-side failures so the
-	// "absent_over_time(successes_total) OR rate(failures_total>0)" alert
-	// in docs/operations/backup-classes.md catches them. The system
+	// "rate(failures_total) > 0 or absent_over_time(successes_total[10m])"
+	// alert in docs/operations/backup-classes.md catches them. The system
 	// projector reports against system namespaces (cozy-velero etc.);
 	// here we attribute against the BackupJob's tenant namespace.
 	credentialsProjectionFailures.WithLabelValues(j.Namespace, classifyReason(err)).Inc()

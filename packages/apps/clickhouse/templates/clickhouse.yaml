@@ -213,17 +213,29 @@ spec:
                 - name: REMOTE_STORAGE
                   value: s3
                 {{- /*
-                  S3_FORCE_PATH_STYLE is incompatible with AWS public S3
-                  (vhost-style is required in many regions). Skip it on
-                  the chart-emitted Secret path when the user has not
-                  configured an endpoint (AWS default). When the user
-                  brings their own Secret via s3CredentialsSecret.name we
-                  cannot peek inside it at render time, so we keep the
-                  upstream default - users on AWS in that mode must add
-                  S3_FORCE_PATH_STYLE=false to their own clickhouse-backup
-                  config.
+                  S3_FORCE_PATH_STYLE selects path-style vs vhost-style S3
+                  addressing: SeaweedFS (the platform default) needs
+                  path-style, while AWS public S3 needs vhost-style in many
+                  regions. On the useSystemBucket flow the value is the
+                  platform's backupStorage.forcePathStyle, which this app
+                  chart cannot read directly, so it is projected into
+                  cozy-backups-creds and consumed via an optional
+                  secretKeyRef (optional: true so the Pod starts before the
+                  first projection). On the legacy paths (own Secret via
+                  s3CredentialsSecret.name, or a configured endpoint) we
+                  cannot peek inside the Secret at render time, so we keep
+                  the historical path-style default — AWS users in that mode
+                  must set S3_FORCE_PATH_STYLE=false in their own
+                  clickhouse-backup config.
                 */}}
-                {{- if or .Values.backup.useSystemBucket (not (eq (default "" .Values.backup.s3CredentialsSecret.name) "")) .Values.backup.endpoint }}
+                {{- if .Values.backup.useSystemBucket }}
+                - name: S3_FORCE_PATH_STYLE
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $sidecarSecretName | quote }}
+                      key: forcePathStyle
+                      optional: true
+                {{- else if or (not (eq (default "" .Values.backup.s3CredentialsSecret.name) "")) .Values.backup.endpoint }}
                 - name: S3_FORCE_PATH_STYLE
                   value: "true"
                 {{- end }}

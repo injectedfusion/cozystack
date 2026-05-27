@@ -47,6 +47,29 @@ tests:
           path: spec.templates.podTemplates[0].spec.containers[?(@.name=="clickhouse-backup")].env[?(@.name=="S3_SECRET_KEY")].valueFrom.secretKeyRef.name
           value: cozy-backups-creds
 
+  - it: "useSystemBucket=true: S3_FORCE_PATH_STYLE is sourced from cozy-backups-creds, not hardcoded"
+    template: templates/clickhouse.yaml
+    documentSelector:
+      path: kind
+      value: ClickHouseInstallation
+    set:
+      backup:
+        enabled: true
+        useSystemBucket: true
+    asserts:
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[?(@.name=="clickhouse-backup")].env[?(@.name=="S3_FORCE_PATH_STYLE")].valueFrom.secretKeyRef.name
+          value: cozy-backups-creds
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[?(@.name=="clickhouse-backup")].env[?(@.name=="S3_FORCE_PATH_STYLE")].valueFrom.secretKeyRef.key
+          value: forcePathStyle
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[?(@.name=="clickhouse-backup")].env[?(@.name=="S3_FORCE_PATH_STYLE")].valueFrom.secretKeyRef.optional
+          value: true
+      - notExists:
+          # must no longer be the hardcoded literal value: "true"
+          path: spec.templates.podTemplates[0].spec.containers[?(@.name=="clickhouse-backup")].env[?(@.name=="S3_FORCE_PATH_STYLE")].value
+
   - it: "useSystemBucket=true: chart-managed backup Secrets are skipped"
     set:
       backup:

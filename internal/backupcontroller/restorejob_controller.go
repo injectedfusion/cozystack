@@ -288,7 +288,18 @@ func (r *RestoreJobReconciler) cleanupResourceModifierConfigMaps(ctx context.Con
 // "finalizer name says velero but the job is CNPG" UX papercut.
 func (r *RestoreJobReconciler) cleanupOnDelete(ctx context.Context, restoreJob *backupsv1alpha1.RestoreJob) {
 	logger := log.FromContext(ctx)
-	kind := strategyKindForRestoreJob(ctx, r.Client, restoreJob)
+	kind, err := strategyKindForRestoreJob(ctx, r.Client, restoreJob)
+	if err != nil {
+		// The referenced Backup is gone or unreadable, so we cannot tell
+		// which driver produced this RestoreJob. Speculatively reap any
+		// Velero Restore it may have created, but quietly: this is not
+		// necessarily a Velero job, so a failure (or a cluster with no
+		// Velero CRDs) must not surface a CleanupFailed event.
+		logger.V(1).Info("RestoreJob Backup unreadable; attempting best-effort Velero cleanup",
+			"restoreJob", restoreJob.Name, "error", err.Error())
+		r.cleanupStrayVeleroRestore(ctx, restoreJob)
+		return
+	}
 	logger.V(1).Info("dispatching RestoreJob cleanup", "restoreJob", restoreJob.Name, "strategy", kind)
 	switch kind {
 	case strategyv1alpha1.VeleroStrategyKind:
@@ -301,29 +312,72 @@ func (r *RestoreJobReconciler) cleanupOnDelete(ctx context.Context, restoreJob *
 		// EtcdClusterSpecCaptured / TargetPurged conditions live on the
 		// RestoreJob itself - all gone with the parent.)
 	default:
-		// Unknown strategy or Backup unreadable. Conservative path: try
-		// the Velero cleanup since it's idempotent (DeleteAllOf with
-		// label selector returns 0 deletes when nothing matches), so a
-		// stray Velero Restore from an old RestoreJob still gets reaped.
-		r.cleanupVeleroRestore(ctx, restoreJob)
+		// Readable Backup, but an unrecognised strategy kind — not Velero
+		// as far as we can tell. Speculatively reap a stray labelled Velero
+		// Restore if one exists, quietly: don't emit a CleanupFailed event
+		// for a strategy this controller doesn't own.
+		logger.V(1).Info("RestoreJob has unrecognised strategy kind; attempting best-effort Velero cleanup",
+			"restoreJob", restoreJob.Name, "kind", kind)
+		r.cleanupStrayVeleroRestore(ctx, restoreJob)
 	}
 }
 
 // strategyKindForRestoreJob looks up the strategy kind via the referenced
-// Backup. Returns "" if the Backup is missing or unreadable; callers must
-// treat that as "unknown" and fall back to a safe default.
-func strategyKindForRestoreJob(ctx context.Context, c client.Client, restoreJob *backupsv1alpha1.RestoreJob) string {
+// Backup. Returns a non-nil error when the Backup is missing or unreadable
+// so callers can distinguish "cannot tell" from a readable Backup whose
+// strategy kind is simply one they don't handle.
+func strategyKindForRestoreJob(ctx context.Context, c client.Client, restoreJob *backupsv1alpha1.RestoreJob) (string, error) {
 	backup := &backupsv1alpha1.Backup{}
 	key := types.NamespacedName{Namespace: restoreJob.Namespace, Name: restoreJob.Spec.BackupRef.Name}
 	if err := c.Get(ctx, key, backup); err != nil {
-		return ""
+		return "", err
 	}
-	return backup.Spec.StrategyRef.Kind
+	return backup.Spec.StrategyRef.Kind, nil
 }
 
 // cleanupVeleroRestore deletes all Velero Restores and resourceModifier
-// ConfigMaps owned by this RestoreJob (identified by labels).
+// ConfigMaps owned by this RestoreJob (identified by labels). Used on the
+// known-Velero path, so a failed Restore delete is surfaced as a
+// CleanupFailed event.
 func (r *RestoreJobReconciler) cleanupVeleroRestore(ctx context.Context, restoreJob *backupsv1alpha1.RestoreJob) {
+	r.deleteVeleroRestoreArtifacts(ctx, restoreJob, true)
+}
+
+// cleanupStrayVeleroRestore is the speculative variant used when we cannot
+// positively identify the RestoreJob as Velero (Backup unreadable, or a
+// readable Backup with an unrecognised strategy kind). It acts only when a
+// labelled Velero Restore actually exists, so on a cluster without the
+// Velero CRDs — a supported configuration, see values.yaml velero.bslEnabled
+// — the List fails and we skip silently. It never emits a CleanupFailed
+// event, because the RestoreJob may not be a Velero job at all.
+func (r *RestoreJobReconciler) cleanupStrayVeleroRestore(ctx context.Context, restoreJob *backupsv1alpha1.RestoreJob) {
+	logger := log.FromContext(ctx)
+	list := &velerov1.RestoreList{}
+	if err := r.List(ctx, list,
+		client.InNamespace(veleroNamespace),
+		client.MatchingLabels{
+			backupsv1alpha1.OwningJobNameLabel:      restoreJob.Name,
+			backupsv1alpha1.OwningJobNamespaceLabel: restoreJob.Namespace,
+		},
+	); err != nil {
+		logger.V(1).Info("skipping speculative Velero cleanup (Velero absent or List failed)",
+			"restoreJob", restoreJob.Name, "reason", err.Error())
+		return
+	}
+	if len(list.Items) == 0 {
+		return
+	}
+	// A stray labelled Velero Restore exists — this RestoreJob was a Velero
+	// job after all. Reap it (and the resourceModifiers ConfigMaps), still
+	// best-effort and event-free.
+	r.deleteVeleroRestoreArtifacts(ctx, restoreJob, false)
+}
+
+// deleteVeleroRestoreArtifacts deletes the Velero Restores and
+// resourceModifier ConfigMaps owned by this RestoreJob. When emitEvent is
+// true a failed Restore delete is surfaced as a CleanupFailed Warning;
+// speculative callers pass false to stay quiet.
+func (r *RestoreJobReconciler) deleteVeleroRestoreArtifacts(ctx context.Context, restoreJob *backupsv1alpha1.RestoreJob, emitEvent bool) {
 	logger := log.FromContext(ctx)
 	opts := []client.DeleteAllOfOption{
 		client.InNamespace(veleroNamespace),
@@ -335,8 +389,10 @@ func (r *RestoreJobReconciler) cleanupVeleroRestore(ctx context.Context, restore
 
 	if err := r.DeleteAllOf(ctx, &velerov1.Restore{}, opts...); err != nil {
 		logger.Error(err, "failed to delete Velero Restore(s)")
-		r.Recorder.Event(restoreJob, corev1.EventTypeWarning, "CleanupFailed",
-			fmt.Sprintf("Failed to delete Velero Restore: %v", err))
+		if emitEvent {
+			r.Recorder.Event(restoreJob, corev1.EventTypeWarning, "CleanupFailed",
+				fmt.Sprintf("Failed to delete Velero Restore: %v", err))
+		}
 	}
 
 	if err := r.DeleteAllOf(ctx, &corev1.ConfigMap{}, opts...); err != nil {

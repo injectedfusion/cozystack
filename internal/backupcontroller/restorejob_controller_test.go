@@ -3,6 +3,7 @@ package backupcontroller
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	strategyv1alpha1 "github.com/cozystack/cozystack/api/backups/strategy/v1alpha1"
@@ -60,14 +62,17 @@ func TestStrategyKindForRestoreJob(t *testing.T) {
 				},
 			}
 			c := newRestoreJobTestClient(t, rj, backup)
-			got := strategyKindForRestoreJob(context.Background(), c, rj)
+			got, err := strategyKindForRestoreJob(context.Background(), c, rj)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if got != tc.want {
 				t.Errorf("got %q want %q", got, tc.want)
 			}
 		})
 	}
 
-	t.Run("missing backup yields empty kind", func(t *testing.T) {
+	t.Run("missing backup yields empty kind and an error", func(t *testing.T) {
 		rj := &backupsv1alpha1.RestoreJob{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "rj"},
 			Spec: backupsv1alpha1.RestoreJobSpec{
@@ -75,8 +80,12 @@ func TestStrategyKindForRestoreJob(t *testing.T) {
 			},
 		}
 		c := newRestoreJobTestClient(t, rj)
-		if got := strategyKindForRestoreJob(context.Background(), c, rj); got != "" {
+		got, err := strategyKindForRestoreJob(context.Background(), c, rj)
+		if got != "" {
 			t.Errorf("expected empty string for missing backup, got %q", got)
+		}
+		if err == nil {
+			t.Errorf("expected an error for missing backup, got nil")
 		}
 	})
 }
@@ -258,6 +267,58 @@ func TestCleanupOnDelete_Velero_DeletesOwnedRestore(t *testing.T) {
 	err := c.Get(context.Background(), client.ObjectKeyFromObject(owned), got)
 	if err == nil {
 		t.Errorf("expected owned Velero Restore to be deleted, but it still exists")
+	}
+}
+
+// TestCleanupOnDelete_BackupUnreadable_DoesNotEmitVeleroCleanupEvent asserts
+// that when the referenced Backup cannot be read - so we cannot tell which
+// driver produced the RestoreJob - cleanup does NOT surface a CleanupFailed
+// Warning event, even on a cluster without the Velero CRDs (a supported
+// configuration) where the speculative Velero List/DeleteAllOf fails.
+// Regression: the old default branch ran cleanupVeleroRestore
+// unconditionally and emitted CleanupFailed (and errored on every delete)
+// for non-Velero / Velero-less clusters.
+func TestCleanupOnDelete_BackupUnreadable_DoesNotEmitVeleroCleanupEvent(t *testing.T) {
+	rj := &backupsv1alpha1.RestoreJob{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "rj"},
+		Spec:       backupsv1alpha1.RestoreJobSpec{BackupRef: corev1.LocalObjectReference{Name: "missing"}},
+	}
+	s := runtime.NewScheme()
+	_ = scheme.AddToScheme(s)
+	_ = backupsv1alpha1.AddToScheme(s)
+	_ = velerov1.AddToScheme(s)
+	// Simulate a cluster with no Velero CRDs: every Velero Restore List /
+	// DeleteAllOf fails the way it would when the kind is unregistered
+	// server-side.
+	veleroAbsent := errors.New(`no matches for kind "Restore" in version "velero.io/v1"`)
+	c := clientfake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(rj).
+		WithStatusSubresource(&backupsv1alpha1.RestoreJob{}, &backupsv1alpha1.BackupJob{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if _, ok := list.(*velerov1.RestoreList); ok {
+					return veleroAbsent
+				}
+				return cl.List(ctx, list, opts...)
+			},
+			DeleteAllOf: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.DeleteAllOfOption) error {
+				if _, ok := obj.(*velerov1.Restore); ok {
+					return veleroAbsent
+				}
+				return cl.DeleteAllOf(ctx, obj, opts...)
+			},
+		}).
+		Build()
+	rec := record.NewFakeRecorder(10)
+	r := &RestoreJobReconciler{Client: c, Recorder: rec}
+
+	r.cleanupOnDelete(context.Background(), rj)
+
+	select {
+	case ev := <-rec.Events:
+		t.Fatalf("expected no event for unreadable-Backup cleanup, got %q", ev)
+	default:
 	}
 }
 

@@ -74,15 +74,23 @@ func IsTransient(err error) bool {
 // produced by the cozy-backups Bucket, the per-tenant projection target
 // Secret name, and the bucket coordinates (endpoint used to format the
 // FDB blob_credentials account-host key, region carried verbatim for
-// drivers like clickhouse-backup that wire it through env). Values are
-// wired from environment variables in main() and the deployment chart
-// populates them from .Values.backupStorage.
+// drivers like clickhouse-backup that wire it through env, forcePathStyle
+// projected as a flat key so the chart-emitted ClickHouse sidecar can read
+// a platform value it cannot see directly). Values are wired from
+// environment variables in main() and the deployment chart populates them
+// from .Values.backupStorage.
 type BackupCredentialsConfig struct {
 	SourceNamespace  string
 	SourceSecretName string
 	TargetSecretName string
 	Endpoint         string
 	Region           string
+	// ForcePathStyle is the string "true"/"false" from
+	// backupStorage.forcePathStyle, projected into the credentials Secret
+	// under the forcePathStyle key. The app charts cannot read
+	// backupStorage.* directly, so the ClickHouse sidecar consumes it via
+	// an optional secretKeyRef as S3_FORCE_PATH_STYLE.
+	ForcePathStyle string
 }
 
 // IsEnabled reports whether credentials projection is configured. When
@@ -146,7 +154,11 @@ func ProjectBackupCredentials(ctx context.Context, c client.Client, cfg BackupCr
 		return err
 	}
 	if creds.endpoint == "" {
-		creds.endpoint = cfg.Endpoint
+		// Scheme-strip the env-var fallback to match the source-Secret path
+		// (parseSourceSecret strips there). The projected `endpoint` key is
+		// consumed verbatim as S3_ENDPOINT by the ClickHouse sidecar, which
+		// expects a bare host:port — see docs/operations/backup-classes.md.
+		creds.endpoint = stripScheme(cfg.Endpoint)
 	}
 	if creds.endpoint == "" {
 		// Both source Secret and BACKUP_STORAGE_ENDPOINT are empty. Fail
@@ -236,6 +248,11 @@ func ProjectBackupCredentials(ctx context.Context, c client.Client, cfg BackupCr
 		setOrDelete(target.Data, "endpoint", creds.endpoint)
 		setOrDelete(target.Data, "bucketName", creds.bucket)
 		setOrDelete(target.Data, "region", creds.region)
+		// forcePathStyle comes from the platform config (backupStorage.
+		// forcePathStyle), not the source Secret: the ClickHouse sidecar
+		// reads it as S3_FORCE_PATH_STYLE because the app chart cannot see
+		// backupStorage.* directly.
+		setOrDelete(target.Data, "forcePathStyle", cfg.ForcePathStyle)
 		return nil
 	}); err != nil {
 		// If the mutator refused to overwrite an unowned Secret, surface

@@ -193,6 +193,7 @@ func main() {
 		TargetSecretName: os.Getenv("BACKUP_STORAGE_CREDS_SECRET_NAME"),
 		Endpoint:         os.Getenv("BACKUP_STORAGE_ENDPOINT"),
 		Region:           os.Getenv("BACKUP_STORAGE_REGION"),
+		ForcePathStyle:   os.Getenv("BACKUP_STORAGE_FORCE_PATH_STYLE"),
 	}
 
 	if systemNamespaces := os.Getenv("BACKUP_STORAGE_SYSTEM_NAMESPACES"); systemNamespaces != "" {

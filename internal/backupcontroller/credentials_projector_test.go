@@ -121,6 +121,63 @@ func TestProject_HappyPath_FlatKeys(t *testing.T) {
 	}
 }
 
+// TestProject_EndpointFallback_StripsScheme covers the external-S3 path
+// where the source Secret omits endpoint and the projector falls back to
+// cfg.Endpoint (raw BACKUP_STORAGE_ENDPOINT, which carries a scheme). The
+// projected `endpoint` key must be scheme-stripped, because the ClickHouse
+// sidecar reads it verbatim as S3_ENDPOINT (a bare host:port).
+func TestProject_EndpointFallback_StripsScheme(t *testing.T) {
+	src := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "cozy-backup-controller",
+			Name:      "bucket-cozy-backups-system-credentials",
+		},
+		Data: map[string][]byte{
+			"accessKey": []byte("AK"),
+			"secretKey": []byte("SK"),
+			// No endpoint key: the projector must fall back to cfg.Endpoint.
+			"bucketName": []byte("cozy-backups"),
+		},
+	}
+	c := newFakeClient(src)
+	ctx := context.Background()
+
+	// defaultCfg().Endpoint carries an http:// scheme.
+	if err := ProjectBackupCredentials(ctx, c, defaultCfg(), "tenant-acme"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := &corev1.Secret{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "tenant-acme", Name: "cozy-backups-creds"}, got); err != nil {
+		t.Fatalf("projected Secret not found: %v", err)
+	}
+	if ep := string(got.Data["endpoint"]); ep != "seaweedfs-s3.tenant-root.svc:8333" {
+		t.Errorf("projected endpoint not scheme-stripped: got %q want %q", ep, "seaweedfs-s3.tenant-root.svc:8333")
+	}
+}
+
+// TestProject_WritesForcePathStyle asserts the platform forcePathStyle knob
+// is projected into the credentials Secret. It is sourced from the config
+// (not the bucket Secret) so the ClickHouse sidecar — which cannot read
+// backupStorage.* — can consume it as S3_FORCE_PATH_STYLE via secretKeyRef.
+func TestProject_WritesForcePathStyle(t *testing.T) {
+	src := flatSourceSecret()
+	c := newFakeClient(src)
+	ctx := context.Background()
+
+	cfg := defaultCfg()
+	cfg.ForcePathStyle = "false"
+	if err := ProjectBackupCredentials(ctx, c, cfg, "tenant-acme"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := &corev1.Secret{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "tenant-acme", Name: "cozy-backups-creds"}, got); err != nil {
+		t.Fatalf("projected Secret not found: %v", err)
+	}
+	if v := string(got.Data["forcePathStyle"]); v != "false" {
+		t.Errorf("forcePathStyle key: got %q want %q", v, "false")
+	}
+}
+
 // TestProject_HappyPath_BucketInfo covers the raw COSI Secret format
 // (single BucketInfo JSON blob) — the fallback that lets the cluster
 // keep working when the user-credentials renderer has not run yet, or
