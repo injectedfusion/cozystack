@@ -8,8 +8,8 @@
 
   This helper looks up objectstorage.k8s.io/v1alpha1/BucketClaim
   `bucket-cozy-backups` (the bucket-rd "bucket-" prefix wraps the
-  apps.cozystack.io/Bucket release name) in the backup-controller
-  namespace and reads `.status.bucketName` — the authoritative S3 bucket
+  apps.cozystack.io/Bucket release name) in the `backupStorage.namespace`
+  (tenant-root by default) and reads `.status.bucketName` — the authoritative S3 bucket
   name the COSI driver chose. The result is consumed by every strategy
   template (CNPG/Etcd/MariaDB/FDB) and by the Velero BackupStorageLocation.
 
@@ -17,16 +17,25 @@
     - provisionBucket: false → the admin manages the source Secret
       directly, and `.Values.backupStorage.bucketName` is authoritative.
       Return it as-is.
+    - provisionBucket: true + BucketClaim status populated → return the
+      COSI-assigned `.status.bucketName`.
     - provisionBucket: true + BucketClaim missing / status not populated →
-      `required` to fail the Helm render. Flux retries the HelmRelease,
-      eventually reading a populated status. dependsOn on
+      emit the empty string (NO `required`, NO render failure). The
+      Strategy and Velero BSL templates gate on a non-empty result and
+      skip rendering, while templates/bucket.yaml ALWAYS renders so the
+      BucketClaim CAN be created on the first install. dependsOn on
       cozystack.bucket-application + cozystack.objectstorage-controller
       ensures the controllers exist before this chart installs, but the
-      Secret/Status is reconciled asynchronously so the first render may
-      still race; a retry settles it.
-    - lookup returns nil during `helm template` / `helm install --dry-run`
-      (no apiserver to query) — fall back to chart values so render works
-      offline. Real deploys go through Flux which uses live lookup.
+      BucketClaim status is reconciled asynchronously, so the first render
+      sees an unpopulated status and skips. Flux re-renders the
+      HelmRelease on its next reconcile (spec.interval); once COSI has
+      populated status.bucketName, the gated templates materialise.
+    - bucketNameOverride set → bypass the lookup and use it directly. This
+      is the escape hatch for offline `helm template` / `--dry-run` renders
+      (CI / local diffs), where lookup returns nil and no apiserver is
+      reachable. When lookup is nil AND no override is set, the helper
+      emits the empty string (the skip-render path above). Real deploys go
+      through Flux, which uses a live lookup and needs no override.
 */}}
 {{- define "backupstrategy-controller.bucketName" -}}
 {{- $configured := .Values.backupStorage.bucketName -}}

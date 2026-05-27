@@ -22,10 +22,10 @@ backupStrategyController:
       cpu: 500m
       memory: 128Mi
 # backupStorage describes the platform-managed S3 bucket used by every
-# default BackupClass strategy. The bucket lives in the backup-controller
-# namespace and is provisioned through the apps.cozystack.io/Bucket CR.
+# default BackupClass strategy. The bucket lives in the backupStorage.namespace
+# (tenant-root by default) and is provisioned through the apps.cozystack.io/Bucket CR.
 # Tenants never see these coordinates directly — they reference cozy-default
-# BackupClass and the backup-controller projects credentials per BackupJob.
+# BackupClass and the backupstrategy-controller projects credentials per BackupJob.
 backupStorage:
   # provisionBucket controls whether to create the apps.cozystack.io/Bucket CR.
   # Set to false when the cluster runs against an external S3 (no SeaweedFS)
@@ -62,7 +62,7 @@ backupStorage:
   region: us-east-1
   forcePathStyle: true
   # systemSecretName — the human-friendly Secret produced by the Bucket
-  # application in the backup-controller namespace. The Bucket release is
+  # application in the backupStorage.namespace (tenant-root by default). The Bucket release is
   # wrapped with the bucket-rd "bucket-" prefix (see
   # packages/system/bucket-rd/cozyrds/bucket.yaml), so the human-friendly
   # Secret rendered by packages/system/bucket/templates/user-credentials.yaml

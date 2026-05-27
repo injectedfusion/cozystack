@@ -95,8 +95,9 @@ rules:
   resources: ["backups"]
   verbs: ["get", "list", "watch", "create", "patch", "delete"]
 # Secrets: the BackupJob/RestoreJob reconcilers project the platform-managed
-# S3 credentials Secret from cozy-backup-controller into each tenant
-# namespace as cozy-backups-creds. The verbs are cluster-scoped because the
+# S3 credentials Secret from the backupStorage.namespace (tenant-root by
+# default) into each tenant namespace as cozy-backups-creds. The verbs are
+# cluster-scoped because the
 # target namespace varies per BackupJob. Only Get + Create/Update/Patch
 # are needed — the projector does no listing or watching. Trimming list +
 # watch keeps the cluster-wide Secret read blast-radius minimal.
