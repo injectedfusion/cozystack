@@ -61,11 +61,19 @@ Does NOT include: networking (variant differs), linstor (talos.enabled differs)
 */}}
 {{- define "cozystack.platform.system.common-packages" -}}
 {{- $root := . -}}
+{{- /* distro-full brings its own networking (noop = BYO Cilium with LB-IPAM + BGP).
+       Skip the kube-ovn helpers (orphan admission webhook with no kube-ovn behind it)
+       and MetalLB (conflicts with Cilium's LoadBalancer over type:LoadBalancer services).
+       Real kube-ovn variants (isp-full / isp-full-generic) keep all three. */ -}}
+{{- if ne $root.Values.bundles.system.variant "distro-full" }}
 {{include "cozystack.platform.package.default" (list "cozystack.kubeovn-webhook" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.kubeovn-plunger" $root) }}
+{{- end }}
 {{include "cozystack.platform.package.default" (list "cozystack.cozy-proxy" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.multus" $root) }}
+{{- if ne $root.Values.bundles.system.variant "distro-full" }}
 {{include "cozystack.platform.package.default" (list "cozystack.metallb" $root) }}
+{{- end }}
 {{include "cozystack.platform.package.default" (list "cozystack.reloader" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.linstor-scheduler" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.snapshot-controller" $root) }}

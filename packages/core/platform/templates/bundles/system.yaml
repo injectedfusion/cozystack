@@ -33,6 +33,18 @@
 {{include "cozystack.platform.package.default" (list "cozystack.cozystack-scheduler" $) }}
 {{- end }}
 
+{{- /* distro-full: re-creates the upstream-removed single-tenant variant.
+       noop networking (bring-your-own Cilium, already installed at Talos bootstrap
+       via Omni manifest-sync) + LINSTOR storage + the full common-packages/engine.
+       No kube-ovn: the Turing Pi 2 shared RTL8370 fabric makes overlay infeasible
+       (ADR-0015/0016), and multi-tenancy/VPC isolation is not used on this cluster. */ -}}
+{{- if eq .Values.bundles.system.variant "distro-full" }}
+{{include "cozystack.platform.package" (list "cozystack.networking" "noop" $) }}
+{{include "cozystack.platform.system.common-packages" $ }}
+{{include "cozystack.platform.package.default" (list "cozystack.linstor" $) }}
+{{include "cozystack.platform.package" (list "cozystack.cozystack-scheduler" "linstor" $) }}
+{{- end }}
+
 {{- if eq .Values.bundles.system.variant "isp-full-generic" }}
 {{- $networkingComponents := dict -}}
 {{- if .Values.networking -}}

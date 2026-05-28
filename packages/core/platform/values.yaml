@@ -10,12 +10,12 @@ migrations:
 # Bundle deployment configuration
 bundles:
   system:
-    enabled: false
-    variant: "isp-full" # Options: "isp-full", "isp-full-generic", "isp-hosted", "distro-full"
+    enabled: true
+    variant: "distro-full" # Options: "isp-full", "isp-full-generic", "isp-hosted", "distro-full"
   iaas:
-    enabled: false
+    enabled: false # KubeVirt/Kamaji/VPC excluded: needs kube-ovn; KubeVirt run vanilla off-platform if needed
   paas:
-    enabled: false
+    enabled: true # managed-app catalog (postgres/redis/etc.) for the self-service dashboard
   naas:
     enabled: false
   disabledPackages: []
