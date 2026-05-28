@@ -60,6 +60,9 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	// platformSourceInsecure allows the generated platform OCIRepository to pull
+	// over plain HTTP / without TLS (e.g. an internal Zot served on HTTP).
+	platformSourceInsecure bool
 )
 
 func init() {
@@ -137,6 +140,7 @@ func main() {
 	flag.StringVar(&platformSourceURL, "platform-source-url", "", "Platform source URL (oci:// or https://). If specified, generates OCIRepository or GitRepository resource.")
 	flag.StringVar(&platformSourceName, "platform-source-name", "cozystack-platform", "Name for the generated platform source resource and PackageSource")
 	flag.StringVar(&platformSourceRef, "platform-source-ref", "", "Reference specification as key=value pairs (e.g., 'branch=main' or 'digest=sha256:...,tag=v1.0'). For OCI: digest, semver, semverFilter, tag. For Git: branch, tag, semver, name, commit.")
+	flag.BoolVar(&platformSourceInsecure, "platform-source-insecure", false, "Allow the generated platform OCIRepository to pull over plain HTTP (no TLS), e.g. an internal Zot served on HTTP.")
 	flag.StringVar(&cozyValuesSecretName, "cozy-values-secret-name", "cozystack-values", "The name of the secret containing cluster-wide configuration values.")
 	flag.StringVar(&cozyValuesSecretNamespace, "cozy-values-secret-namespace", "cozy-system", "The namespace of the secret containing cluster-wide configuration values.")
 	flag.StringVar(&cozyValuesNamespaceSelector, "cozy-values-namespace-selector", "cozystack.io/system=true", "The label selector for namespaces where the cluster-wide configuration values must be replicated.")
@@ -589,6 +593,7 @@ func generateOCIRepository(name, repoURL string, refMap map[string]string) (*sou
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:      repoURL,
 			Interval: metav1.Duration{Duration: 5 * time.Minute},
+			Insecure: platformSourceInsecure,
 		},
 	}
 

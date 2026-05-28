@@ -7,9 +7,11 @@ bareNamespace: false
 cozystackOperator:
   # Deployment variant: talos, generic, hosted
   variant: talos
-  image: ghcr.io/injectedfusion/cozystack/cozystack-operator:v1.4.1
-  platformSourceUrl: 'oci://ghcr.io/injectedfusion/cozystack/cozystack-packages'
-  platformSourceRef: 'digest=sha256:d437271b27d9d3349ff283f690dd04e3ff62eb25aefa0135a78de712349f19e1'
+  image: ghcr.io/injectedfusion/cozystack/cozystack-operator:v1.4.1-distrofull@sha256:279723e11257878c4071968617e1e28c395dc8dc70229ff3153dde34139a25b2
+  platformSourceUrl: 'oci://192.168.15.19:5000/injectedfusion/cozystack/cozystack-packages'
+  platformSourceRef: 'digest=sha256:016c1f711069978959eba5d98351e79c80ea6c78ff628ca9156839a2c3a6a6c4'
+  # mac-mini Zot is plain HTTP; allow the platform OCIRepository to pull without TLS.
+  platformSourceInsecure: true
   # When non-empty, overrides the operator's --helmrelease-interval flag
   # (operator default: 5m). E2E sets this to 30s; production should leave empty.
   helmReleaseInterval: ""
