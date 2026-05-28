@@ -3,9 +3,9 @@ metallb:
     enabled: true
   controller:
     image:
-      repository: ghcr.io/cozystack/cozystack/metallb-controller
-      tag: v0.15.2@sha256:623ce74b5802bff6e29f29478ccab29ce4162a64148be006c69e16cc3207e289
+      repository: quay.io/metallb/controller
+      tag: v0.15.2
   speaker:
     image:
-      repository: ghcr.io/cozystack/cozystack/metallb-speaker
-      tag: v0.15.2@sha256:f264058afd9228452a260ab9c9dd1859404745627a2a38c2ba4671e27f3b3bb2
+      repository: quay.io/metallb/speaker
+      tag: v0.15.2

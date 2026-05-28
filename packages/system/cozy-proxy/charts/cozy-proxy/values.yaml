@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/cozystack/cozystack/cozy-proxy
+  repository: ghcr.io/injectedfusion/cozystack/cozy-proxy
   tag: v0.3.0
   pullPolicy: IfNotPresent
 

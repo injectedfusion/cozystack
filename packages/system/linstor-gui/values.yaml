@@ -2,7 +2,7 @@
 ## @param image.repository LINSTOR GUI container image repository
 ## @param image.tag LINSTOR GUI container image tag (digest recommended)
 image:
-  repository: ghcr.io/cozystack/cozystack/linstor-gui
+  repository: ghcr.io/injectedfusion/cozystack/linstor-gui
   tag: 2.3.0@sha256:4496a459869f73e69bdf70e0a3df94ffb2632f067771566f1a38294cb61a2188
 ## @section Deployment
 ## @param replicas Number of linstor-gui replicas
