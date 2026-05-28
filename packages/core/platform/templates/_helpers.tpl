@@ -61,14 +61,14 @@ Does NOT include: networking (variant differs), linstor (talos.enabled differs)
 */}}
 {{- define "cozystack.platform.system.common-packages" -}}
 {{- $root := . -}}
-{{- /* distro-full brings its own networking (noop = BYO Cilium with LB-IPAM + BGP).
+{{- /* turing-pi2 brings its own networking (noop = BYO Cilium with LB-IPAM + BGP).
        Exclude EVERYTHING that touches the CNI/LB layer so the install cannot perturb
        the existing Cilium: kube-ovn helpers (orphan admission webhook), Multus (a
        meta-CNI that can rewrite the node CNI config dir), and MetalLB (fights Cilium's
-       LoadBalancer over type:LoadBalancer services). With these out, distro-full
+       LoadBalancer over type:LoadBalancer services). With these out, turing-pi2
        installs zero networking-layer components; Cilium is wholly outside the blast
        radius. Real kube-ovn variants (isp-full / isp-full-generic) keep all of them. */ -}}
-{{- if ne $root.Values.bundles.system.variant "distro-full" }}
+{{- if ne $root.Values.bundles.system.variant "turing-pi2" }}
 {{include "cozystack.platform.package.default" (list "cozystack.kubeovn-webhook" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.kubeovn-plunger" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.multus" $root) }}

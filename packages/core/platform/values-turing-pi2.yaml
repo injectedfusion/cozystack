@@ -1,0 +1,23 @@
+# turing-pi2 variant overlay.
+#
+# Single-tenant Cozystack profile for a Turing Pi 2 board (4x RK1 arm64 SoC):
+#   - system enabled: full engine/dashboard + LINSTOR storage + monitoring
+#   - networking: noop (bring-your-own Cilium; the shared RTL8370 switch fabric
+#     can't carry a kube-ovn overlay - see ADR-0015/0016). The turing-pi2 block in
+#     templates/bundles/system.yaml + _helpers.tpl excludes kube-ovn, MetalLB and
+#     Multus so the install never perturbs the existing Cilium (BGP/LB-IPAM).
+#   - paas enabled: managed-app catalog (postgres/redis/kafka/...) for the dashboard.
+#   - iaas/naas disabled: tenant Kubernetes, VPC and KubeVirt need kube-ovn; run
+#     KubeVirt vanilla off-platform if VMs are ever wanted (PoC-only on this board).
+migrations:
+  enabled: true
+bundles:
+  system:
+    enabled: true
+    variant: "turing-pi2"
+  iaas:
+    enabled: false
+  paas:
+    enabled: true
+  naas:
+    enabled: false

@@ -76,7 +76,7 @@ func TestInstallPlatformPackageSource_Creates(t *testing.T) {
 	}
 
 	// Verify variants
-	expectedVariants := []string{"default", "isp-full", "isp-hosted", "isp-full-generic"}
+	expectedVariants := []string{"default", "isp-full", "isp-hosted", "isp-full-generic", "turing-pi2"}
 	if len(ps.Spec.Variants) != len(expectedVariants) {
 		t.Fatalf("expected %d variants, got %d", len(expectedVariants), len(ps.Spec.Variants))
 	}
@@ -127,9 +127,9 @@ func TestInstallPlatformPackageSource_Updates(t *testing.T) {
 		t.Errorf("expected updated sourceRef.name %q, got %q", "cozystack-platform", ps.Spec.SourceRef.Name)
 	}
 
-	// Verify all 4 variants are present after update
-	if len(ps.Spec.Variants) != 4 {
-		t.Errorf("expected 4 variants after update, got %d", len(ps.Spec.Variants))
+	// Verify all 5 variants are present after update
+	if len(ps.Spec.Variants) != 5 {
+		t.Errorf("expected 5 variants after update, got %d", len(ps.Spec.Variants))
 	}
 
 	// Verify that labels set by other controllers are preserved (SSA does not overwrite unmanaged fields)
@@ -217,6 +217,7 @@ func TestInstallPlatformPackageSource_VariantValuesFiles(t *testing.T) {
 		"isp-full":         {"values.yaml", "values-isp-full.yaml"},
 		"isp-hosted":       {"values.yaml", "values-isp-hosted.yaml"},
 		"isp-full-generic": {"values.yaml", "values-isp-full-generic.yaml"},
+		"turing-pi2":       {"values.yaml", "values-turing-pi2.yaml"},
 	}
 
 	for _, v := range ps.Spec.Variants {
