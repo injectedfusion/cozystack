@@ -21,3 +21,25 @@ bundles:
     enabled: true
   naas:
     enabled: false
+# Single-tenant homelab on mishawaka.d3fi.net. Ingress is pure Cilium Gateway
+# API (Envoy), not the bundled ingress-nginx (amd64-only image, deprecated
+# upstream anyway) - the dashboard/keycloak Ingress objects cozystack emits are
+# inert here; Gateway + HTTPRoute are authored out-of-band per host.
+publishing:
+  host: "mishawaka.d3fi.net"
+  certificates:
+    # DNS-01 via Cloudflare (cloudflare-api-token-secret in cozy-cert-manager).
+    # Required for wildcard/intranet hosts that LE can't HTTP-01 validate.
+    solver: dns01
+    issuerName: letsencrypt-prod
+# OIDC SSO via the bundled Keycloak (quay.io/keycloak/keycloak:26.5.2 is arm64).
+# Enabling this deploys keycloak + keycloak-operator + keycloak-configure (which
+# auto-creates the `cozy` realm + `dashboard` client from publishing.host), flips
+# the cozystack-engine to its oidc variant, and switches the dashboard gatekeeper
+# from the token-proxy to oauth2-proxy -> Keycloak.
+authentication:
+  oidc:
+    enabled: true
+    # Backend-to-backend OIDC calls go direct to the in-cluster Keycloak Service
+    # (avoids hairpinning the gatekeeper pod out through the Gateway LB IP).
+    keycloakInternalUrl: "http://keycloak-http.cozy-keycloak.svc:8080/realms/cozy"

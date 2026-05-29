@@ -1,8 +1,12 @@
 keycloak-operator:
   image:
+    # arm64 rebuild of EPAM edp-keycloak-operator (upstream cozystack image is
+    # amd64-only). Built from images/keycloak-operator/Dockerfile, pushed to the
+    # mac-mini Zot, pulled via the ghcr.io->Zot registry mirror. Required for
+    # the turing-pi2 (arm64) board once OIDC is enabled.
     registry: ghcr.io
-    repository: cozystack/cozystack/keycloak-operator
-    tag: "latest@sha256:27279247dfbd2d1e86fc4e827d34c891880ca65eefd75da1701bc0a1adf865a9"
+    repository: injectedfusion/cozystack/keycloak-operator
+    tag: "arm64-oidc@sha256:6affb2563f0967601de75020fc1ea790109c259f7122ff25ddf2143ef32a1704"
   clusterReconciliationEnabled: true
   resources:
     limits:
