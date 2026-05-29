@@ -9,7 +9,7 @@ cozystackOperator:
   variant: talos
   image: ghcr.io/injectedfusion/cozystack/cozystack-operator:v1.4.1-turingpi2@sha256:2f8e2ddf4c90b8cda3ad7457fe9b7945d59768d55c9c0880a52eabc527128e86
   platformSourceUrl: 'oci://192.168.15.19:5000/injectedfusion/cozystack/cozystack-packages'
-  platformSourceRef: 'digest=sha256:e722e9a783964c80479129466ae19750cdcae08727a519ec9a285b42fd2c440e'
+  platformSourceRef: 'digest=sha256:adf7d38a9e0ca39fb61a668c8d018e86ad2d44f9f6bb45ac1334802009a88e10'
   # mac-mini Zot is plain HTTP; allow the platform OCIRepository to pull without TLS.
   platformSourceInsecure: true
   # When non-empty, overrides the operator's --helmrelease-interval flag
